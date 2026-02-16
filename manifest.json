@@ -1,0 +1,33 @@
+{
+  "name": "oneliner — clipboard line-break remover",
+  "short_name": "oneliner",
+  "description": "Paste multiline terminal commands, get a single line back. Auto-converts clipboard.",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#101014",
+  "theme_color": "#101014",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["developer", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Convert Clipboard",
+      "short_name": "Convert",
+      "url": "/index.html",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

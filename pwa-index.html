@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#101014" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="oneliner" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Paste multiline terminal commands, get a single line back." />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>▸ oneliner</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>▸</text></svg>" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #101014;
+      --surface: #18181b;
+      --border: #27272a;
+      --border-subtle: #1e1e23;
+      --text: #e4e4e7;
+      --text-dim: #a1a1aa;
+      --text-muted: #71717a;
+      --text-faint: #52525b;
+      --text-ghost: #3f3f46;
+      --accent: #4afa8f;
+      --accent-dim: rgba(74, 250, 143, 0.12);
+      --accent-border: rgba(74, 250, 143, 0.2);
+      --accent-glow: rgba(74, 250, 143, 0.4);
+      --mono: 'IBM Plex Mono', 'SF Mono', 'Fira Code', monospace;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    html { height: 100%; overflow: hidden; }
+
+    body {
+      height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      background: var(--bg); color: var(--text); font-family: var(--mono);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 16px; padding-bottom: var(--safe-bottom);
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed; top: 24px; left: 50%; transform: translateX(-50%) translateY(-20px);
+      opacity: 0; background: var(--accent-dim); border: 1px solid rgba(74,250,143,0.25);
+      border-radius: 8px; padding: 8px 20px; font-size: 12px; color: var(--accent);
+      letter-spacing: 1px; pointer-events: none; z-index: 999;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      transition: all 0.3s ease;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* Header */
+    header { width: 100%; max-width: 720px; padding: 24px 0 0; flex-shrink: 0; }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    h1 { font-size: 18px; font-weight: 500; letter-spacing: -0.5px; color: #f4f4f5; }
+    h1 .caret { color: var(--accent); margin-right: 8px; }
+    .subtitle { margin-top: 4px; font-size: 11px; color: var(--text-muted); letter-spacing: 0.3px; font-weight: 300; }
+    .controls { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+    /* Status Pill */
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 10px;
+      text-transform: uppercase; letter-spacing: 1.5px; border-radius: 100px;
+      padding: 4px 12px 4px 8px; transition: all 0.4s ease; white-space: nowrap;
+    }
+    .pill.active { color: var(--accent); background: rgba(74,250,143,0.07); border: 1px solid var(--accent-border); }
+    .pill.inactive { color: #6b7280; background: rgba(107,114,128,0.07); border: 1px solid rgba(107,114,128,0.15); }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; transition: all 0.4s ease; }
+    .pill.active .pill-dot { background: var(--accent); box-shadow: 0 0 8px rgba(74,250,143,0.53); }
+    .pill.inactive .pill-dot { background: #4b5563; }
+
+    /* Toggle */
+    .toggle {
+      position: relative; width: 52px; height: 28px; border-radius: 100px;
+      cursor: pointer; padding: 0; transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+      outline: none; -webkit-appearance: none; appearance: none; flex-shrink: 0;
+    }
+    .toggle.on {
+      border: 1.5px solid rgba(74,250,143,0.35);
+      background: linear-gradient(135deg, rgba(74,250,143,0.15), rgba(34,197,94,0.1));
+      box-shadow: 0 0 16px rgba(74,250,143,0.1);
+    }
+    .toggle.off {
+      border: 1.5px solid rgba(107,114,128,0.3);
+      background: rgba(30,30,36,0.8); box-shadow: none;
+    }
+    .toggle-thumb {
+      position: absolute; top: 3px; width: 20px; height: 20px; border-radius: 50%;
+      transition: all 0.35s cubic-bezier(0.4,0,0.2,1); pointer-events: none;
+    }
+    .toggle.on .toggle-thumb {
+      left: 26px; background: linear-gradient(135deg, #4afa8f, #22c55e);
+      box-shadow: 0 2px 10px var(--accent-glow);
+    }
+    .toggle.off .toggle-thumb {
+      left: 3px; background: #6b7280; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+
+    /* Main */
+    main { width: 100%; max-width: 720px; margin-top: 20px; flex: 1; }
+
+    .label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 2px;
+      color: var(--text-faint); display: block; margin-bottom: 8px;
+    }
+
+    /* Textarea */
+    .input-wrap { position: relative; margin-bottom: 2px; }
+    textarea {
+      width: 100%; min-height: 120px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 14px 40px; font-family: var(--mono); font-size: 13px;
+      line-height: 1.7; color: #d4d4d8; resize: none; outline: none; transition: border-color 0.2s;
+      -webkit-appearance: none;
+    }
+    textarea:focus { border-color: rgba(74,250,143,0.3); }
+    textarea::placeholder { color: #3f3f46; }
+
+    .btn-clear {
+      position: absolute; bottom: 10px; right: 12px; background: rgba(113,113,122,0.1);
+      border: 1px solid rgba(113,113,122,0.15); border-radius: 6px; padding: 6px 14px;
+      font-family: var(--mono); font-size: 10px; color: var(--text-muted); cursor: pointer;
+      letter-spacing: 1px; text-transform: uppercase; transition: all 0.2s; display: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-clear:active { background: rgba(113,113,122,0.2); }
+    .btn-clear.visible { display: block; }
+
+    /* Divider */
+    .divider { display: none; align-items: center; gap: 12px; padding: 12px 0; }
+    .divider.visible { display: flex; }
+    .divider-line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); }
+    .divider-text { font-size: 10px; color: var(--text-faint); letter-spacing: 1.5px; white-space: nowrap; }
+
+    /* Output */
+    #output-section { display: none; }
+    #output-section.visible { display: block; }
+    .output-box {
+      position: relative; background: var(--surface); border: 1px solid rgba(74,250,143,0.12);
+      border-radius: 10px; padding: 14px 50px 14px 14px; cursor: pointer; transition: border-color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .output-box:active { border-color: rgba(74,250,143,0.4); background: rgba(24,24,27,0.9); }
+    .output-box code {
+      font-family: var(--mono); font-size: 13px; line-height: 1.7; color: var(--accent);
+      word-break: break-all; display: block;
+    }
+    .output-box .copy-label {
+      position: absolute; top: 14px; right: 14px; font-size: 10px; color: var(--text-faint);
+      letter-spacing: 1px; text-transform: uppercase; pointer-events: none;
+    }
+
+    /* Paste button for mobile */
+    #paste-btn {
+      display: none; width: 100%; margin-top: 16px; padding: 16px; border-radius: 10px;
+      background: linear-gradient(135deg, rgba(74,250,143,0.1), rgba(34,197,94,0.05));
+      border: 1.5px solid var(--accent-border); color: var(--accent);
+      font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 1px;
+      text-transform: uppercase; cursor: pointer; text-align: center;
+      -webkit-tap-highlight-color: transparent; transition: all 0.2s;
+    }
+    #paste-btn:active { background: rgba(74,250,143,0.15); }
+    @media (hover: none) and (pointer: coarse) { #paste-btn { display: block; } }
+
+    /* How it works */
+    #howto { margin-top: 28px; padding: 20px; background: rgba(24,24,27,0.5); border: 1px solid var(--border-subtle); border-radius: 10px; }
+    #howto.hidden { display: none; }
+    #howto .section-title { font-size: 11px; color: var(--text-faint); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 14px; }
+    .step { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+    .step:last-child { margin-bottom: 0; }
+    .step-num { font-size: 10px; color: var(--accent); font-weight: 600; min-width: 18px; opacity: 0.5; }
+    .step-text { font-size: 13px; color: var(--text-dim); font-weight: 300; }
+
+    /* History */
+    #history { margin-top: 24px; padding-bottom: calc(40px + var(--safe-bottom)); display: none; }
+    #history.visible { display: block; }
+    .history-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .history-count { font-size: 10px; color: var(--text-faint); letter-spacing: 1.5px; text-transform: uppercase; }
+    .btn-clear-history {
+      background: none; border: none; font-family: var(--mono); font-size: 10px;
+      color: var(--text-ghost); cursor: pointer; letter-spacing: 1px; text-transform: uppercase;
+      padding: 6px 4px; -webkit-tap-highlight-color: transparent;
+    }
+    .btn-clear-history:active { color: var(--text-muted); }
+    .history-list { display: flex; flex-direction: column; gap: 6px; }
+    .history-item {
+      background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 8px;
+      padding: 12px 14px; cursor: pointer; transition: border-color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .history-item:active { border-color: var(--border); background: rgba(24,24,27,0.8); }
+    .history-item code {
+      font-family: var(--mono); font-size: 11px; color: var(--text-muted);
+      display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* Install banner */
+    #install-banner {
+      display: none; width: 100%; max-width: 720px; margin-top: 16px; padding: 14px 16px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+      flex-shrink: 0;
+    }
+    #install-banner.visible { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    #install-banner p { font-size: 12px; color: var(--text-dim); font-weight: 300; }
+    #install-btn {
+      background: var(--accent); color: #101014; border: none; border-radius: 6px;
+      padding: 8px 16px; font-family: var(--mono); font-size: 11px; font-weight: 600;
+      letter-spacing: 0.5px; cursor: pointer; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #install-btn:active { opacity: 0.8; }
+    #dismiss-install {
+      background: none; border: none; color: var(--text-ghost); font-size: 18px;
+      cursor: pointer; padding: 4px; line-height: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="toast">✓ COPIED TO CLIPBOARD</div>
+
+  <header>
+    <div class="header-row">
+      <div>
+        <h1><span class="caret">▸</span>oneliner</h1>
+        <p class="subtitle">multiline → one-liner · auto clipboard</p>
+      </div>
+      <div class="controls">
+        <span id="pill" class="pill active">
+          <span class="pill-dot"></span>
+          <span id="pill-text">On</span>
+        </span>
+        <button id="toggle" class="toggle on" aria-label="Toggle auto-convert">
+          <span class="toggle-thumb"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div id="install-banner">
+    <p>Install as app for quick access</p>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <button id="install-btn">Install</button>
+      <button id="dismiss-install">×</button>
+    </div>
+  </div>
+
+  <main>
+    <div class="input-wrap">
+      <label class="label">Input · multiline</label>
+      <textarea id="input" placeholder="paste a multiline command here" spellcheck="false"></textarea>
+      <button id="btn-clear" class="btn-clear">Clear</button>
+    </div>
+
+    <button id="paste-btn">📋 Tap to paste from clipboard</button>
+
+    <div id="divider" class="divider">
+      <div class="divider-line"></div>
+      <span id="divider-text" class="divider-text"></span>
+      <div class="divider-line"></div>
+    </div>
+
+    <div id="output-section">
+      <label class="label">Output · one-liner</label>
+      <div id="output-box" class="output-box">
+        <code id="output-code"></code>
+        <span class="copy-label">tap to copy</span>
+      </div>
+    </div>
+
+    <div id="howto">
+      <p class="section-title">How it works</p>
+      <div class="step"><span class="step-num">01</span><span class="step-text">Copy a multiline command from any source</span></div>
+      <div class="step"><span class="step-num">02</span><span class="step-text">Tap "Paste from clipboard" or paste into the box</span></div>
+      <div class="step"><span class="step-num">03</span><span class="step-text">One-liner auto-copies to your clipboard</span></div>
+      <div class="step"><span class="step-num">04</span><span class="step-text">Switch to your terminal and paste — done</span></div>
+    </div>
+
+    <div id="history">
+      <div class="history-header">
+        <span id="history-count" class="history-count"></span>
+        <button id="btn-clear-history" class="btn-clear-history">Clear</button>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      let enabled = true;
+      let historyItems = [];
+
+      const $ = (id) => document.getElementById(id);
+      const toast = $('toast'), pill = $('pill'), pillText = $('pill-text');
+      const toggle = $('toggle'), input = $('input'), btnClear = $('btn-clear');
+      const divider = $('divider'), dividerText = $('divider-text');
+      const outputSection = $('output-section'), outputBox = $('output-box');
+      const outputCode = $('output-code'), howto = $('howto');
+      const historyEl = $('history'), historyCount = $('history-count');
+      const historyList = $('history-list'), btnClearHistory = $('btn-clear-history');
+      const pasteBtn = $('paste-btn');
+
+      function collapseLines(text) {
+        if (!text) return '';
+        return text.split('\n')
+          .map(l => l.replace(/\\\s*$/, '').trimEnd())
+          .filter(l => l.length > 0)
+          .join(' ')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+      }
+
+      function showToast() {
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 1800);
+      }
+
+      function escapeHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+
+      function processAndCopy(text) {
+        input.value = text;
+        const result = collapseLines(text);
+        if (result && enabled) {
+          navigator.clipboard.writeText(result).then(() => {
+            showToast();
+            historyItems.unshift({ original: text, converted: result });
+            if (historyItems.length > 20) historyItems.pop();
+            updateUI();
+          }).catch(() => {
+            // Clipboard write failed (permissions), still show result
+            updateUI();
+          });
+        } else {
+          updateUI();
+        }
+      }
+
+      function updateUI() {
+        const text = input.value;
+        const hasInput = text.trim().length > 0;
+
+        btnClear.classList.toggle('visible', hasInput);
+        howto.classList.toggle('hidden', hasInput);
+
+        if (hasInput) {
+          const result = collapseLines(text);
+          const lineCount = text.split('\n').length - 1;
+          const charsSaved = text.length - result.length;
+
+          divider.classList.add('visible');
+          dividerText.textContent = lineCount + ' line' + (lineCount !== 1 ? 's' : '') + ' removed · ' + charsSaved + ' chars saved';
+          outputSection.classList.add('visible');
+          outputCode.textContent = result;
+        } else {
+          divider.classList.remove('visible');
+          outputSection.classList.remove('visible');
+        }
+
+        if (historyItems.length > 0) {
+          historyEl.classList.add('visible');
+          historyCount.textContent = 'Recent · ' + historyItems.length;
+          historyList.innerHTML = '';
+          historyItems.forEach((item) => {
+            const el = document.createElement('div');
+            el.className = 'history-item';
+            el.innerHTML = '<code>' + escapeHtml(item.converted) + '</code>';
+            el.addEventListener('click', () => {
+              navigator.clipboard.writeText(item.converted).then(showToast);
+            });
+            historyList.appendChild(el);
+          });
+        } else {
+          historyEl.classList.remove('visible');
+        }
+      }
+
+      // Toggle
+      toggle.addEventListener('click', () => {
+        enabled = !enabled;
+        toggle.className = 'toggle ' + (enabled ? 'on' : 'off');
+        pill.className = 'pill ' + (enabled ? 'active' : 'inactive');
+        pillText.textContent = enabled ? 'On' : 'Off';
+      });
+
+      // Input
+      input.addEventListener('input', updateUI);
+      btnClear.addEventListener('click', () => { input.value = ''; updateUI(); });
+
+      // Copy output
+      outputBox.addEventListener('click', () => {
+        const text = outputCode.textContent;
+        if (text) navigator.clipboard.writeText(text).then(showToast);
+      });
+
+      // Clear history
+      btnClearHistory.addEventListener('click', () => { historyItems = []; updateUI(); });
+
+      // Mobile paste button — reads from clipboard API
+      pasteBtn.addEventListener('click', async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.includes('\n')) {
+            processAndCopy(text);
+          } else if (text) {
+            input.value = text;
+            updateUI();
+          }
+        } catch (err) {
+          // Clipboard read denied — focus textarea for manual paste
+          input.focus();
+          input.placeholder = 'Long-press and paste here ↑';
+        }
+      });
+
+      // Global paste handler
+      window.addEventListener('paste', (e) => {
+        if (!enabled) return;
+        const pasted = e.clipboardData?.getData('text');
+        if (pasted && pasted.includes('\n')) {
+          processAndCopy(pasted);
+        }
+      });
+
+      // ========== PWA Install Prompt ==========
+      let deferredPrompt = null;
+      const installBanner = $('install-banner');
+      const installBtn = $('install-btn');
+      const dismissInstall = $('dismiss-install');
+
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        installBanner.classList.add('visible');
+      });
+
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const result = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        installBanner.classList.remove('visible');
+      });
+
+      dismissInstall.addEventListener('click', () => {
+        installBanner.classList.remove('visible');
+        deferredPrompt = null;
+      });
+
+      window.addEventListener('appinstalled', () => {
+        installBanner.classList.remove('visible');
+      });
+
+      // ========== Service Worker ==========
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      }
+
+      updateUI();
+    })();
+  </script>
+</body>
+</html>
